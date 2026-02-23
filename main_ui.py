@@ -157,26 +157,37 @@ def compute_action():
     raw_equation = raw_display_var.get()
     solve_for = target_var.get()
 
+    trail_display.delete(1.0, tk.END)  # Clear previous trail
+
+    # 1. UI Level Validation
     if not raw_equation or "=" not in raw_equation:
+        # Just log the fail status, the pop-up does the talking!
+        trail_display.insert(tk.END, "[VALIDATION STATUS: FAIL]\n")
         messagebox.showwarning("Input Error", "Please enter a complete equation with an '=' sign.")
         return
 
     if not solve_for:
+        trail_display.insert(tk.END, "[VALIDATION STATUS: FAIL]\n")
         messagebox.showwarning("Input Error", "No variable detected to solve for.")
         return
 
-    # NEW: Use our sanitizer function before passing to the math engine!
     math_equation = sanitize_math_string(raw_equation)
-
     final_answer_label.config(text="FINAL ANSWER: Computing...")
-    trail_display.delete(1.0, tk.END)
 
-    # CALL OUR NEW MATH ENGINE
+    # 2. Engine Level Computation
     final_answer, trail_text = solve_linear_equation(math_equation, solve_for)
 
-    # DISPLAY THE RESULTS
-    final_answer_label.config(text=f"FINAL ANSWER: {final_answer}")
-    trail_display.insert(tk.END, trail_text)
+    # 3. Log Engine Validation Status & Show Pop-ups
+    if final_answer in ["Error", "No Solution"]:
+        # Cleaned up this line as well
+        trail_display.insert(tk.END, "[VALIDATION STATUS: FAIL]\n")
+        final_answer_label.config(text="FINAL ANSWER: Error")
+
+        messagebox.showerror("Computation Error", trail_text)
+    else:
+        trail_display.insert(tk.END, "[VALIDATION STATUS: PASS]\n\n")
+        trail_display.insert(tk.END, trail_text)
+        final_answer_label.config(text=f"FINAL ANSWER: {final_answer}")
 
 # --- Main Window Setup ---
 root = tk.Tk()

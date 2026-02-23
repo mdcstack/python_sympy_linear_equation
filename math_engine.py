@@ -29,8 +29,9 @@ def solve_linear_equation(equation_string, target_var_str):
     try:
         LHS = sp.sympify(lhs_str)
         RHS = sp.sympify(rhs_str)
-    except Exception as e:
-        return "Error", f"Could not parse the mathematical expression: {e}"
+    except Exception:
+        # Instead of showing the raw computer error, we return a friendly human message!
+        return "Error", "Invalid math formatting. Please check for incomplete equations or missing numbers."
 
     steps = []
 
