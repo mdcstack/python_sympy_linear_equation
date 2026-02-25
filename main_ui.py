@@ -12,9 +12,17 @@ from matplotlib.figure import Figure
 
 # --- UI Action Functions ---
 def block_keyboard_typing(event):
-    if event.keysym in ['Left', 'Right']:
+    """Allows letters, numbers, math operators, and navigation keys."""
+    # 1. Allow arrow keys and Backspace for easy editing
+    if event.keysym in ['Left', 'Right', 'BackSpace', 'Delete']:
         return None
 
+        # 2. NEW: Allow all numbers (0-9) and standard math symbols!
+    allowed_symbols = ['+', '-', '*', '/', '=', '(', ')', '.', '^']
+    if event.char.isdigit() or event.char in allowed_symbols:
+        return None
+
+    # 3. Keep our strict letter rules (no consecutive letters like "xy")
     if event.char.isalpha():
         cursor_pos = screen.index(tk.INSERT)
         current_text = raw_display_var.get()
@@ -26,6 +34,7 @@ def block_keyboard_typing(event):
 
         return None
 
+        # 4. Block absolutely everything else (spacebar, !, @, ?, etc.)
     return "break"
 
 
