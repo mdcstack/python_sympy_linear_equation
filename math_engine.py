@@ -102,7 +102,7 @@ def solve_linear_equation(equation_string, target_var_str):
     # ==========================================
     runtime = round(time.time() - start_time, 4)
     timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    summary = f"Runtime: {runtime}s | Iterations: 1 | Timestamp: {timestamp} | SymPy {sp.__version__}"
+    summary = f"Runtime: {runtime}s | Iterations: 1 \nTimestamp: {timestamp} | SymPy {sp.__version__}"
 
     # Stitch everything together
     trail = f"GIVEN: {equation_string} | Solve for: {target_var_str}\n\n"

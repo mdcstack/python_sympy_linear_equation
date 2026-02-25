@@ -65,7 +65,7 @@ def delete_last():
 def insert_fraction():
     cursor_pos = screen.index(tk.INSERT)
     current_text = raw_display_var.get()
-    new_text = current_text[:cursor_pos] + "()÷()" + current_text[cursor_pos:]
+    new_text = current_text[:cursor_pos] + "()/()" + current_text[cursor_pos:]
     raw_display_var.set(new_text)
     screen.icursor(cursor_pos + 1)
     screen.focus()
