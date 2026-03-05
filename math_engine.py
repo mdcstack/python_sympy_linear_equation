@@ -2,7 +2,7 @@ import sympy as sp
 
 
 def solve_linear_equation(equation_str, target_var_str):
-    """Calculates the answer and generates a detailed step-by-step list."""
+    """Calculates the answer and generates a highly educational, extremely detailed 7-step list."""
     steps = []
     try:
         if equation_str.count("=") != 1:
@@ -11,7 +11,7 @@ def solve_linear_equation(equation_str, target_var_str):
         lhs_str, rhs_str = equation_str.split("=", 1)
         v = sp.Symbol(target_var_str)
 
-        # THE FIX: Parse with evaluate=False to preserve the exact GIVEN order
+        # Parse safely to preserve the exact GIVEN order
         LHS_raw = sp.sympify(lhs_str, evaluate=False)
         RHS_raw = sp.sympify(rhs_str, evaluate=False)
 
@@ -20,53 +20,60 @@ def solve_linear_equation(equation_str, target_var_str):
         steps.append(("text", f"Solve for: {v}\n"))
         steps.append(("text", "METHOD: Deterministic Algorithmic Isolation\n"))
 
-        # Now parse them normally so the computer can actually do math
         LHS = sp.sympify(lhs_str)
         RHS = sp.sympify(rhs_str)
 
-        # STEP 1
-        steps.append(("text", "1. Move everything to the left side to equal zero (LHS - RHS = 0):"))
-        collected_expr = LHS - RHS
-        steps.append(("math", sp.Eq(collected_expr, 0, evaluate=False)))
+        # STEP 1: The true "Move to left" visual (LHS - (RHS) = 0)
+        steps.append(("text", "1. Move all terms to the left side by subtracting the right side (LHS - RHS = 0):"))
+        step1_expr = sp.Add(LHS_raw, sp.Mul(-1, RHS_raw, evaluate=False), evaluate=False)
+        steps.append(("math", sp.Eq(step1_expr, 0, evaluate=False)))
 
-        if not collected_expr.has(v):
+        # Validate the equation safely
+        collected_expr = sp.simplify(LHS - RHS)
+        if not collected_expr.has(v) and collected_expr != 0:
             return "Error", [("text", f"The variable '{v}' is not in the equation!")]
 
-        # Error Checks
-        num, den = sp.fraction(sp.cancel(collected_expr))
+        num, den = sp.fraction(sp.cancel(LHS - RHS))
         if den.has(v):
             return "Error", [("text", f"Not a linear equation. Variable '{v}' is in a denominator.")]
         if sp.degree(collected_expr, v) > 1:
             return "Error", [("text", f"Not a linear equation. Variable '{v}' has an exponent.")]
 
-        # STEP 2
-        steps.append(("text", "2. Expand all parentheses and distribute terms:"))
-        expanded_expr = sp.expand(collected_expr)
+        # STEP 2: Explicitly show parentheses expanding
+        steps.append(("text", "2. Expand any parentheses and distribute multiplication:"))
+        expanded_expr = sp.expand(LHS - RHS)
         steps.append(("math", sp.Eq(expanded_expr, 0, evaluate=False)))
 
-        # STEP 3
-        steps.append(("text", f"3. Factor out the target variable '{v}':"))
-        factored_expr = sp.collect(expanded_expr, v)
-        steps.append(("math", sp.Eq(factored_expr, 0, evaluate=False)))
+        # STEP 3: Combine Like terms
+        steps.append(("text", "3. Combine all like terms to create the simplified standard form:"))
+        steps.append(("math", sp.Eq(collected_expr, 0, evaluate=False)))
 
-        # STEP 4
-        A = factored_expr.coeff(v)
-        B = factored_expr.subs(v, 0)
-
-        steps.append(("text", f"4. Identify the coefficients (A*{v} + B = 0):"))
-        steps.append(("text", f"   A = {A}"))
-        steps.append(("text", f"   B = {B}\n"))
+        A = collected_expr.coeff(v)
+        B = collected_expr - (A * v)
 
         if A == 0:
             return "No Solution", [("text", f"No Solution: The variable '{v}' cancels out.")]
 
-        # STEP 5
-        steps.append(("text", f"5. Move the remainder to the right side (A*{v} = -B):"))
-        steps.append(("math", sp.Eq(A * v, -B, evaluate=False)))
+        # STEP 4: Identify A and B explicitly for the student
+        steps.append(("text", f"4. Identify the coefficient (A) and the constant (B) for the format A*{v} + B = 0:"))
+        steps.append(("text", f"   Coefficient A = {A}"))
+        steps.append(("text", f"   Constant B = {B}\n"))
 
-        # STEP 6
-        steps.append(("text", f"6. Isolate '{v}' by dividing both sides by A (-B / A):"))
+        # STEP 5: Move the constant
+        steps.append(("text", f"5. Move the constant ({B}) to the right side by subtracting it from both sides:"))
+        ax_expr = sp.Mul(A, v, evaluate=False)
+        steps.append(("math", sp.Eq(ax_expr, -B, evaluate=False)))
+
+        # STEP 6: The explicit division fraction
+        steps.append(("text", f"6. To isolate '{v}', divide both sides by the coefficient ({A}):"))
+        latex_A = sp.latex(A)
+        latex_negB = sp.latex(-B)
+        latex_v = sp.latex(v)
+        steps.append(("math", f"${latex_v} = \\frac{{{latex_negB}}}{{{latex_A}}}$"))
+
+        # STEP 7: Final Answer
         answer = sp.simplify(-B / A)
+        steps.append(("text", "7. Simplify the fraction to calculate the final exact answer:"))
 
         if answer.is_number and not answer.is_Integer:
             decimal_answer = round(float(answer.evalf()), 4)
