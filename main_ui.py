@@ -4,25 +4,64 @@ import sympy as sp
 import matplotlib
 import re
 from math_engine import solve_linear_equation
+from PIL import Image, ImageTk
+import io
+from solution_display import display_solution_trail
 
 matplotlib.use("TkAgg")
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.figure import Figure
 
+# --- Global Trackers for Animation & Panning ---
+animation_id = None
+pan_start_x = None
+initial_xlim = None
+
+
+def on_canvas_press(event):
+    """Records the starting X position when the user clicks the screen."""
+    global pan_start_x, initial_xlim
+    if event.button == 1:  # 1 is the Left Mouse Button
+        pan_start_x = event.x
+        initial_xlim = ax.get_xlim()
+
+        # NEW: Change cursor to the 4-way move cross when clicked
+        canvas.get_tk_widget().config(cursor="fleur")
+
+
+def on_canvas_drag(event):
+    """Pans the camera horizontally as the user drags the mouse."""
+    global pan_start_x, initial_xlim
+    if pan_start_x is not None and event.button == 1:
+        # Calculate how far the mouse moved in pixels
+        dx_pixels = pan_start_x - event.x
+        # Convert pixels to Matplotlib data units (4.5 width * 100 dpi = 450 pixels)
+        dx_data = dx_pixels / 450.0
+
+        # Shift the camera limits and redraw
+        ax.set_xlim(initial_xlim[0] + dx_data, initial_xlim[1] + dx_data)
+        canvas.draw_idle()
+
+
+def on_canvas_release(event):
+    """Stops the panning when the user lets go of the mouse button."""
+    global pan_start_x
+    pan_start_x = None
+
+    # NEW: Revert the cursor back to the hovering hand
+    canvas.get_tk_widget().config(cursor="hand2")
+
 
 # --- UI Action Functions ---
 def block_keyboard_typing(event):
     """Allows letters, numbers, math operators, and navigation keys."""
-    # 1. Allow arrow keys and Backspace for easy editing
     if event.keysym in ['Left', 'Right', 'BackSpace', 'Delete']:
         return None
 
-        # 2. NEW: Allow all numbers (0-9) and standard math symbols!
     allowed_symbols = ['+', '-', '*', '/', '=', '(', ')', '.', '^']
     if event.char.isdigit() or event.char in allowed_symbols:
         return None
 
-    # 3. Keep our strict letter rules (no consecutive letters like "xy")
     if event.char.isalpha():
         cursor_pos = screen.index(tk.INSERT)
         current_text = raw_display_var.get()
@@ -34,7 +73,6 @@ def block_keyboard_typing(event):
 
         return None
 
-        # 4. Block absolutely everything else (spacebar, !, @, ?, etc.)
     return "break"
 
 
@@ -56,6 +94,11 @@ def button_click(character):
 
 
 def clear_all():
+    global animation_id
+    if animation_id is not None:
+        root.after_cancel(animation_id)
+        animation_id = None
+
     raw_display_var.set("")
     final_answer_label.config(text="FINAL ANSWER: ")
     trail_display.delete(1.0, tk.END)
@@ -81,19 +124,10 @@ def insert_fraction():
 
 
 def sanitize_math_string(raw_str):
-    """Converts UI string into SymPy-friendly string with explicit multiplication."""
-    # 1. Swap our custom UI symbols for Python math operators
     text = raw_str.replace('÷', '/').replace('^', '**')
-
-    # 2. Insert '*' between a Number and a Letter/Parenthesis (e.g., "2x" -> "2*x", "2(" -> "2*(")
     text = re.sub(r'(\d)([A-Za-z\(])', r'\1*\2', text)
-
-    # 3. Insert '*' between a Letter and a Parenthesis (e.g., "x(" -> "x*(")
     text = re.sub(r'([A-Za-z])(\()', r'\1*\2', text)
-
-    # 4. Insert '*' between a closing Parenthesis and a Letter/Number/Parenthesis (e.g., ")x" -> ")*x")
     text = re.sub(r'(\))([A-Za-z0-9\(])', r'\1*\2', text)
-
     return text
 
 
@@ -110,7 +144,12 @@ def update_pretty_display():
             lhs_latex = sp.latex(lhs_expr, mul_symbol='dot', order='none') if lhs_expr else ""
             rhs_latex = sp.latex(rhs_expr, mul_symbol='dot', order='none') if rhs_expr else ""
 
-            # NEW: Clean the LaTeX to remove the dot between numbers and letters!
+            lhs_latex = re.sub(r'([0-9A-Za-z]+)\s*\\cdot\s*\\frac\{1\}\{([0-9A-Za-z]+)\}', r'\\frac{\1}{\2}', lhs_latex)
+            rhs_latex = re.sub(r'([0-9A-Za-z]+)\s*\\cdot\s*\\frac\{1\}\{([0-9A-Za-z]+)\}', r'\\frac{\1}{\2}', rhs_latex)
+            lhs_latex = re.sub(r'(\\left\(.*?\\right\))\s*\\cdot\s*\\frac\{1\}\{([0-9A-Za-z]+)\}', r'\\frac{\1}{\2}',
+                               lhs_latex)
+            rhs_latex = re.sub(r'(\\left\(.*?\\right\))\s*\\cdot\s*\\frac\{1\}\{([0-9A-Za-z]+)\}', r'\\frac{\1}{\2}',
+                               rhs_latex)
             lhs_latex = re.sub(r'(\d)\s*\\cdot\s*([A-Za-z])', r'\1\2', lhs_latex)
             rhs_latex = re.sub(r'(\d)\s*\\cdot\s*([A-Za-z])', r'\1\2', rhs_latex)
 
@@ -119,7 +158,10 @@ def update_pretty_display():
             expr = sp.sympify(math_text, evaluate=False)
             expr_latex = sp.latex(expr, mul_symbol='dot', order='none')
 
-            # NEW: Clean the LaTeX here as well
+            expr_latex = re.sub(r'([0-9A-Za-z]+)\s*\\cdot\s*\\frac\{1\}\{([0-9A-Za-z]+)\}', r'\\frac{\1}{\2}',
+                                expr_latex)
+            expr_latex = re.sub(r'(\\left\(.*?\\right\))\s*\\cdot\s*\\frac\{1\}\{([0-9A-Za-z]+)\}', r'\\frac{\1}{\2}',
+                                expr_latex)
             expr_latex = re.sub(r'(\d)\s*\\cdot\s*([A-Za-z])', r'\1\2', expr_latex)
 
             pretty_math = f"${expr_latex}$"
@@ -162,15 +204,38 @@ def on_text_change(*args):
     update_variable_options()
 
 
+def render_math_to_image(math_expr):
+    """Creates a temporary canvas to draw the math, and converts it to a pasteable image."""
+    fig_temp = Figure(figsize=(5, 0.6), dpi=100)
+    fig_temp.patch.set_alpha(0.0)  # Transparent background
+    ax_temp = fig_temp.add_subplot(111)
+    ax_temp.axis("off")
+
+    latex_str = sp.latex(math_expr, mul_symbol='dot', order='none')
+
+    # Apply our custom fraction cleaners
+    latex_str = re.sub(r'([0-9A-Za-z]+)\s*\\cdot\s*\\frac\{1\}\{([0-9A-Za-z]+)\}', r'\\frac{\1}{\2}', latex_str)
+    latex_str = re.sub(r'(\\left\(.*?\\right\))\s*\\cdot\s*\\frac\{1\}\{([0-9A-Za-z]+)\}', r'\\frac{\1}{\2}', latex_str)
+    latex_str = re.sub(r'(\d)\s*\\cdot\s*([A-Za-z])', r'\1\2', latex_str)
+
+    ax_temp.text(0.0, 0.5, f"${latex_str}$", size=14, ha="left", va="center")
+
+    # Save the drawing to computer memory
+    buf = io.BytesIO()
+    fig_temp.savefig(buf, format="png", bbox_inches='tight', transparent=True)
+    buf.seek(0)
+
+    img = Image.open(buf)
+    return ImageTk.PhotoImage(img)
+
+
 def compute_action():
     raw_equation = raw_display_var.get()
     solve_for = target_var.get()
 
-    trail_display.delete(1.0, tk.END)  # Clear previous trail
+    trail_display.delete(1.0, tk.END)
 
-    # 1. UI Level Validation
     if not raw_equation or "=" not in raw_equation:
-        # Just log the fail status, the pop-up does the talking!
         trail_display.insert(tk.END, "[VALIDATION STATUS: FAIL]\n")
         messagebox.showwarning("Input Error", "Please enter a complete equation with an '=' sign.")
         return
@@ -182,26 +247,28 @@ def compute_action():
 
     math_equation = sanitize_math_string(raw_equation)
     final_answer_label.config(text="FINAL ANSWER: Computing...")
+    root.update()
 
-    # 2. Engine Level Computation
-    final_answer, trail_text = solve_linear_equation(math_equation, solve_for)
+    # 1. Ask the Math Engine for the answer and steps
+    final_answer, trail_steps = solve_linear_equation(math_equation, solve_for)
 
-    # 3. Log Engine Validation Status & Show Pop-ups
     if final_answer in ["Error", "No Solution"]:
-        # Cleaned up this line as well
-        trail_display.insert(tk.END, "[VALIDATION STATUS: FAIL]\n")
+        trail_display.insert(tk.END, "[VALIDATION STATUS: FAIL]\n\n")
+        display_solution_trail(trail_display, trail_steps)
         final_answer_label.config(text="FINAL ANSWER: Error")
-
-        messagebox.showerror("Computation Error", trail_text)
+        messagebox.showerror("Computation Error", trail_steps[0][1])
     else:
         trail_display.insert(tk.END, "[VALIDATION STATUS: PASS]\n\n")
-        trail_display.insert(tk.END, trail_text)
+
+        # 2. Hand the steps to the Solution Display renderer
+        display_solution_trail(trail_display, trail_steps)
+
         final_answer_label.config(text=f"FINAL ANSWER: {final_answer}")
 
 # --- Main Window Setup ---
 root = tk.Tk()
 root.title("Linear Equation Calculator")
-root.geometry("950x620")  # Changed to a wide desktop layout
+root.geometry("950x620")
 root.resizable(False, False)
 root.configure(padx=20, pady=20)
 
@@ -211,7 +278,6 @@ root.configure(padx=20, pady=20)
 left_frame = tk.Frame(root)
 left_frame.pack(side=tk.LEFT, fill=tk.Y, padx=(0, 20))
 
-# 1. The Pretty Print Screen
 fig = Figure(figsize=(4.5, 1.2), dpi=100)
 fig.patch.set_facecolor('#e8f4f8')
 ax = fig.add_subplot(111)
@@ -219,9 +285,17 @@ ax.axis("off")
 ax.text(1.0, 0.5, "0", size=20, ha="right", va="center")
 
 canvas = FigureCanvasTkAgg(fig, master=left_frame)
-canvas.get_tk_widget().pack(fill=tk.X, pady=(0, 5))
+canvas_widget = canvas.get_tk_widget()
+canvas_widget.pack(fill=tk.X, pady=(0, 5))
 
-# 2. The Raw Input Screen
+# NEW: Set the default cursor to a hand when hovering over the display
+canvas_widget.config(cursor="hand2")
+
+# Bind the mouse events
+canvas.mpl_connect('button_press_event', on_canvas_press)
+canvas.mpl_connect('motion_notify_event', on_canvas_drag)
+canvas.mpl_connect('button_release_event', on_canvas_release)
+
 raw_display_var = tk.StringVar()
 raw_display_var.trace_add("write", on_text_change)
 
@@ -230,13 +304,12 @@ screen = tk.Entry(left_frame, textvariable=raw_display_var, font=("Consolas", 14
 screen.pack(fill=tk.X, pady=(0, 15))
 screen.bind("<Key>", block_keyboard_typing)
 
-# 3. The Keypad Area
 keypad_frame = tk.Frame(left_frame)
 keypad_frame.pack()
 
 buttons = [
     ('7', 0, 0), ('8', 0, 1), ('9', 0, 2), ('(', 0, 3), (')', 0, 4),
-    ('4', 1, 0), ('5', 1, 1), ('6', 1, 2), ('*', 1, 3), ('÷', 1, 4),
+    ('4', 1, 0), ('5', 1, 1), ('6', 1, 2), ('*', 1, 3), ('/', 1, 4),  # Changed to forward slash
     ('1', 2, 0), ('2', 2, 1), ('3', 2, 2), ('+', 2, 3), ('-', 2, 4),
     ('0', 3, 0), ('.', 3, 1), ('x', 3, 2), ('y', 3, 3), ('^', 3, 4),
     ('C', 4, 0), ('Del', 4, 1), ('=', 4, 2), ('a/b', 4, 3)
@@ -244,22 +317,21 @@ buttons = [
 
 for text, row, col in buttons:
     if text == 'C':
-        action = clear_all;
+        action = clear_all
         bg_color = "#ff9999"
     elif text == 'Del':
-        action = delete_last;
+        action = delete_last
         bg_color = "#ffcc99"
     elif text == 'a/b':
-        action = insert_fraction;
+        action = insert_fraction
         bg_color = "#b3d9ff"
     else:
-        action = lambda char=text: button_click(char);
+        action = lambda char=text: button_click(char)
         bg_color = "#f0f0f0"
 
     tk.Button(keypad_frame, text=text, width=4, height=2, font=("Helvetica", 12, "bold"),
               bg=bg_color, command=action).grid(row=row, column=col, padx=2, pady=2)
 
-# 4. The Action Buttons
 options_frame = tk.Frame(left_frame)
 options_frame.pack(pady=(15, 0))
 
@@ -284,7 +356,6 @@ final_answer_label.pack(fill=tk.X, pady=(0, 15))
 
 tk.Label(right_frame, text="Solution Trail & Auditing:", font=("Helvetica", 12, "bold")).pack(anchor="w", pady=(0, 5))
 
-# Made the text box much larger to utilize the new space
 trail_display = scrolledtext.ScrolledText(right_frame, font=("Consolas", 11), bg="#f9f9f9", wrap=tk.WORD, bd=3,
                                           relief=tk.SUNKEN)
 trail_display.pack(fill=tk.BOTH, expand=True)
