@@ -123,7 +123,14 @@ def solve_linear_equation(equation_str, target_var_str):
         B = collected_expr - (A * v)
 
         if A == 0:
-            return "No Solution", [("text", f"No Solution: The variable '{v}' cancels out.")]
+            if B == 0:
+                steps.append(("text",
+                              f"   Wait! The coefficient A is 0, and the constant B is also 0. This leaves a universally true statement (0 = 0)."))
+                return "Infinite Solutions", steps
+            else:
+                steps.append(("text",
+                              f"   Wait! The coefficient A is 0, but the constant B is {B}. This leaves a universally false statement ({B} = 0)."))
+                return "No Solution", steps
 
         # DYNAMIC STEP: Identify A and B
         steps.append(

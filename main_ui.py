@@ -12,54 +12,178 @@ matplotlib.use("TkAgg")
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.figure import Figure
 
-# --- Global Trackers for Animation & Panning ---
+# --- Global Trackers for Top Screen Panning ---
 animation_id = None
 pan_start_x = None
 initial_xlim = None
 
+# --- Global Trackers for Final Answer Panning ---
+fa_pan_start_x = None
+fa_initial_xlim = None
+
 
 def on_canvas_press(event):
-    """Records the starting X position when the user clicks the screen."""
+    """Records the starting X position for the TOP screen."""
     global pan_start_x, initial_xlim
-    if event.button == 1:  # 1 is the Left Mouse Button
+    if event.button == 1:
         pan_start_x = event.x
         initial_xlim = ax.get_xlim()
-
-        # NEW: Change cursor to the 4-way move cross when clicked
         canvas.get_tk_widget().config(cursor="fleur")
 
 
 def on_canvas_drag(event):
-    """Pans the camera horizontally as the user drags the mouse."""
+    """Pans the camera horizontally for the TOP screen, with boundary limits."""
     global pan_start_x, initial_xlim
     if pan_start_x is not None and event.button == 1:
-        # Calculate how far the mouse moved in pixels
         dx_pixels = pan_start_x - event.x
-        # Convert pixels to Matplotlib data units (4.5 width * 100 dpi = 450 pixels)
         dx_data = dx_pixels / 450.0
 
-        # Shift the camera limits and redraw
-        ax.set_xlim(initial_xlim[0] + dx_data, initial_xlim[1] + dx_data)
+        new_left = initial_xlim[0] + dx_data
+        new_right = initial_xlim[1] + dx_data
+
+        # NEW: Bounding Box Collision Detection
+        if ax.texts:
+            renderer = canvas.get_renderer()
+            bbox = ax.texts[0].get_window_extent(renderer=renderer).transformed(ax.transData.inverted())
+
+            # Find the true edges of the math equation (with a tiny 0.05 padding)
+            min_left = min(bbox.x0, 0.0) - 0.05
+            max_right = max(bbox.x1, 1.0) + 0.05
+            view_width = initial_xlim[1] - initial_xlim[0]
+
+            # If the camera hits the left wall, stop it
+            if new_left < min_left:
+                new_left = min_left
+                new_right = new_left + view_width
+            # If the camera hits the right wall, stop it
+            elif new_right > max_right:
+                new_right = max_right
+                new_left = new_right - view_width
+
+        ax.set_xlim(new_left, new_right)
         canvas.draw_idle()
 
 
+def on_fa_canvas_drag(event):
+    """Pans the camera horizontally for the BOTTOM screen, with boundary limits."""
+    global fa_pan_start_x, fa_initial_xlim
+    if fa_pan_start_x is not None and event.button == 1:
+        dx_pixels = fa_pan_start_x - event.x
+        dx_data = dx_pixels / 500.0
+
+        new_left = fa_initial_xlim[0] + dx_data
+        new_right = fa_initial_xlim[1] + dx_data
+
+        # NEW: Bounding Box Collision Detection
+        if fa_ax.texts:
+            renderer = fa_canvas.get_renderer()
+            bbox = fa_ax.texts[0].get_window_extent(renderer=renderer).transformed(fa_ax.transData.inverted())
+
+            min_left = min(bbox.x0, 0.0) - 0.05
+            max_right = max(bbox.x1, 1.0) + 0.05
+            view_width = fa_initial_xlim[1] - fa_initial_xlim[0]
+
+            if new_left < min_left:
+                new_left = min_left
+                new_right = new_left + view_width
+            elif new_right > max_right:
+                new_right = max_right
+                new_left = new_right - view_width
+
+        fa_ax.set_xlim(new_left, new_right)
+        fa_canvas.draw_idle()
+
+
 def on_canvas_release(event):
-    """Stops the panning when the user lets go of the mouse button."""
+    """Stops the panning for the TOP screen."""
     global pan_start_x
     pan_start_x = None
-
-    # NEW: Revert the cursor back to the hovering hand
     canvas.get_tk_widget().config(cursor="hand2")
 
 
+# --- NEW: Final Answer Panning Functions ---
+def on_fa_canvas_press(event):
+    """Records the starting X position for the BOTTOM screen."""
+    global fa_pan_start_x, fa_initial_xlim
+    if event.button == 1:
+        fa_pan_start_x = event.x
+        fa_initial_xlim = fa_ax.get_xlim()
+        fa_canvas.get_tk_widget().config(cursor="fleur")
+
+
+def on_fa_canvas_release(event):
+    """Stops the panning for the BOTTOM screen."""
+    global fa_pan_start_x
+    fa_pan_start_x = None
+    fa_canvas.get_tk_widget().config(cursor="hand2")
+
+
 # --- UI Action Functions ---
+def set_final_answer(text_content):
+    """Translates the text to LaTeX and draws it on the Matplotlib Canvas."""
+    fa_ax.clear()
+    fa_ax.axis("off")
+
+    # Reset the camera view back to the left edge
+    fa_ax.set_xlim(0, 1)
+    fa_ax.set_ylim(0, 1)
+
+    display_text = text_content
+
+    # If the answer contains math (has an '=' sign and isn't an Error)
+    if "FINAL ANSWER:" in text_content and "=" in text_content and "Error" not in text_content:
+        raw_math = text_content.replace("FINAL ANSWER:", "").strip()
+        decimal_part = ""
+
+        # Split off the "(or approx...)" part if it exists
+        if "(or" in raw_math:
+            parts = raw_math.split("(or")
+            raw_math = parts[0].strip()
+            decimal_part = " (or " + parts[1].strip()
+
+        try:
+            lhs, rhs = raw_math.split("=")
+            lhs_expr = sp.sympify(lhs, evaluate=False)
+            rhs_expr = sp.sympify(rhs, evaluate=False)
+
+            lhs_latex = sp.latex(lhs_expr)
+            rhs_latex = sp.latex(rhs_expr)
+
+            # Clean up SymPy's fraction formatting to make it look beautiful
+            rhs_latex = re.sub(r'([0-9A-Za-z]+)\s*\\cdot\s*\\frac\{1\}\{([0-9A-Za-z]+)\}', r'\\frac{\1}{\2}', rhs_latex)
+            rhs_latex = re.sub(r'(\d)\s*\\cdot\s*([A-Za-z])', r'\1\2', rhs_latex)
+
+            # Combine the Bold text, the LaTeX math, and the decimal string
+            display_text = f"$\\mathbf{{FINAL\\ ANSWER:}}$ ${lhs_latex} = {rhs_latex}$" + decimal_part
+        except Exception:
+            pass  # If the math parser fails, safely fall back to plain text
+
+    # Draw the final result onto the canvas
+    fa_ax.text(0.02, 0.5, display_text, size=16, ha="left", va="center", color="blue")
+    fa_canvas.draw()
+
+
 def block_keyboard_typing(event):
-    """Allows letters, numbers, math operators, and navigation keys."""
+    """Allows letters, numbers, math operators, and handles operator replacement."""
     if event.keysym in ['Left', 'Right', 'BackSpace', 'Delete']:
         return None
 
     allowed_symbols = ['+', '-', '*', '/', '=', '(', ')', '.', '^']
     if event.char.isdigit() or event.char in allowed_symbols:
+
+        # Intercept physical keyboard stacking operators
+        operators = ['+', '-', '*', '/', '^']
+        if event.char in operators:
+            cursor_pos = screen.index(tk.INSERT)
+            current_text = raw_display_var.get()
+
+            if cursor_pos > 0 and current_text[cursor_pos - 1] in operators:
+                # Replace the old operator with the typed one
+                new_text = current_text[:cursor_pos - 1] + event.char + current_text[cursor_pos:]
+                raw_display_var.set(new_text)
+                screen.icursor(cursor_pos)
+                return "break"
+
         return None
 
     if event.char.isalpha():
@@ -87,6 +211,16 @@ def button_click(character):
         if cursor_pos < len(current_text) and current_text[cursor_pos].isalpha():
             return
 
+    # Prevent stacking operators by replacing the last one
+    operators = ['+', '-', '*', '/', '^']
+    if char_str in operators and cursor_pos > 0:
+        if current_text[cursor_pos - 1] in operators:
+            new_text = current_text[:cursor_pos - 1] + char_str + current_text[cursor_pos:]
+            raw_display_var.set(new_text)
+            screen.icursor(cursor_pos)
+            screen.focus()
+            return
+
     new_text = current_text[:cursor_pos] + char_str + current_text[cursor_pos:]
     raw_display_var.set(new_text)
     screen.icursor(cursor_pos + len(char_str))
@@ -100,7 +234,7 @@ def clear_all():
         animation_id = None
 
     raw_display_var.set("")
-    final_answer_label.config(text="FINAL ANSWER: ")
+    set_final_answer("$\\mathbf{FINAL\\ ANSWER:}$ ")
     trail_display.delete(1.0, tk.END)
 
 
@@ -204,31 +338,6 @@ def on_text_change(*args):
     update_variable_options()
 
 
-def render_math_to_image(math_expr):
-    """Creates a temporary canvas to draw the math, and converts it to a pasteable image."""
-    fig_temp = Figure(figsize=(5, 0.6), dpi=100)
-    fig_temp.patch.set_alpha(0.0)  # Transparent background
-    ax_temp = fig_temp.add_subplot(111)
-    ax_temp.axis("off")
-
-    latex_str = sp.latex(math_expr, mul_symbol='dot', order='none')
-
-    # Apply our custom fraction cleaners
-    latex_str = re.sub(r'([0-9A-Za-z]+)\s*\\cdot\s*\\frac\{1\}\{([0-9A-Za-z]+)\}', r'\\frac{\1}{\2}', latex_str)
-    latex_str = re.sub(r'(\\left\(.*?\\right\))\s*\\cdot\s*\\frac\{1\}\{([0-9A-Za-z]+)\}', r'\\frac{\1}{\2}', latex_str)
-    latex_str = re.sub(r'(\d)\s*\\cdot\s*([A-Za-z])', r'\1\2', latex_str)
-
-    ax_temp.text(0.0, 0.5, f"${latex_str}$", size=14, ha="left", va="center")
-
-    # Save the drawing to computer memory
-    buf = io.BytesIO()
-    fig_temp.savefig(buf, format="png", bbox_inches='tight', transparent=True)
-    buf.seek(0)
-
-    img = Image.open(buf)
-    return ImageTk.PhotoImage(img)
-
-
 def compute_action():
     raw_equation = raw_display_var.get()
     solve_for = target_var.get()
@@ -245,25 +354,31 @@ def compute_action():
         messagebox.showwarning("Input Error", "No variable detected to solve for.")
         return
 
+    invalid_combos = ['+-', '-+', '++', '--', '*/', '/*', '+*', '+/', '-*', '-/', '..']
+
+    for combo in invalid_combos:
+        if combo in raw_equation:
+            trail_display.insert(tk.END, "[VALIDATION STATUS: FAIL]\n")
+            messagebox.showwarning("Syntax Error",
+                                   f"Invalid math formatting: '{combo}' is not allowed. Please clean up your operators.")
+            return
+
     math_equation = sanitize_math_string(raw_equation)
-    final_answer_label.config(text="FINAL ANSWER: Computing...")
+    set_final_answer("$\\mathbf{FINAL\\ ANSWER:}$ Computing...")
     root.update()
 
-    # 1. Ask the Math Engine for the answer and steps
     final_answer, trail_steps = solve_linear_equation(math_equation, solve_for)
 
     if final_answer in ["Error", "No Solution"]:
         trail_display.insert(tk.END, "[VALIDATION STATUS: FAIL]\n\n")
         display_solution_trail(trail_display, trail_steps)
-        final_answer_label.config(text="FINAL ANSWER: Error")
+        set_final_answer("$\\mathbf{FINAL\\ ANSWER:}$ Error")
         messagebox.showerror("Computation Error", trail_steps[0][1])
     else:
         trail_display.insert(tk.END, "[VALIDATION STATUS: PASS]\n\n")
-
-        # 2. Hand the steps to the Solution Display renderer
         display_solution_trail(trail_display, trail_steps)
+        set_final_answer(f"FINAL ANSWER: {final_answer}")
 
-        final_answer_label.config(text=f"FINAL ANSWER: {final_answer}")
 
 # --- Main Window Setup ---
 root = tk.Tk()
@@ -278,6 +393,7 @@ root.configure(padx=20, pady=20)
 left_frame = tk.Frame(root)
 left_frame.pack(side=tk.LEFT, fill=tk.Y, padx=(0, 20))
 
+# TOP MATPLOTLIB CANVAS
 fig = Figure(figsize=(4.5, 1.2), dpi=100)
 fig.patch.set_facecolor('#e8f4f8')
 ax = fig.add_subplot(111)
@@ -287,11 +403,8 @@ ax.text(1.0, 0.5, "0", size=20, ha="right", va="center")
 canvas = FigureCanvasTkAgg(fig, master=left_frame)
 canvas_widget = canvas.get_tk_widget()
 canvas_widget.pack(fill=tk.X, pady=(0, 5))
-
-# NEW: Set the default cursor to a hand when hovering over the display
 canvas_widget.config(cursor="hand2")
 
-# Bind the mouse events
 canvas.mpl_connect('button_press_event', on_canvas_press)
 canvas.mpl_connect('motion_notify_event', on_canvas_drag)
 canvas.mpl_connect('button_release_event', on_canvas_release)
@@ -309,7 +422,7 @@ keypad_frame.pack()
 
 buttons = [
     ('7', 0, 0), ('8', 0, 1), ('9', 0, 2), ('(', 0, 3), (')', 0, 4),
-    ('4', 1, 0), ('5', 1, 1), ('6', 1, 2), ('*', 1, 3), ('/', 1, 4),  # Changed to forward slash
+    ('4', 1, 0), ('5', 1, 1), ('6', 1, 2), ('*', 1, 3), ('/', 1, 4),
     ('1', 2, 0), ('2', 2, 1), ('3', 2, 2), ('+', 2, 3), ('-', 2, 4),
     ('0', 3, 0), ('.', 3, 1), ('x', 3, 2), ('y', 3, 3), ('^', 3, 4),
     ('C', 4, 0), ('Del', 4, 1), ('=', 4, 2), ('a/b', 4, 3)
@@ -350,9 +463,24 @@ tk.Button(left_frame, text="COMPUTE", font=("Helvetica", 12, "bold"), bg="#99ff9
 right_frame = tk.Frame(root)
 right_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
 
-final_answer_label = tk.Label(right_frame, text="FINAL ANSWER: ", font=("Helvetica", 16, "bold"), fg="blue",
-                              bg="#f0f8ff", relief=tk.RIDGE, bd=3, padx=10, pady=10)
-final_answer_label.pack(fill=tk.X, pady=(0, 15))
+# NEW: BOTTOM MATPLOTLIB CANVAS (The Final Answer Display)
+fa_fig = Figure(figsize=(5.0, 0.6), dpi=100)
+fa_fig.patch.set_facecolor('#f0f8ff')
+fa_ax = fa_fig.add_subplot(111)
+fa_ax.axis("off")
+fa_ax.set_xlim(0, 1)
+fa_ax.set_ylim(0, 1)
+fa_ax.text(0.02, 0.5, "$\\mathbf{FINAL\\ ANSWER:}$ ", size=16, ha="left", va="center", color="blue")
+
+fa_canvas = FigureCanvasTkAgg(fa_fig, master=right_frame)
+fa_canvas_widget = fa_canvas.get_tk_widget()
+fa_canvas_widget.config(cursor="hand2", relief=tk.RIDGE, bd=3)
+fa_canvas_widget.pack(fill=tk.X, pady=(0, 15))
+
+# Bind the panning mouse events for the bottom screen!
+fa_canvas.mpl_connect('button_press_event', on_fa_canvas_press)
+fa_canvas.mpl_connect('motion_notify_event', on_fa_canvas_drag)
+fa_canvas.mpl_connect('button_release_event', on_fa_canvas_release)
 
 tk.Label(right_frame, text="Solution Trail & Auditing:", font=("Helvetica", 12, "bold")).pack(anchor="w", pady=(0, 5))
 
