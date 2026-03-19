@@ -367,18 +367,24 @@ def compute_action():
     set_final_answer("$\\mathbf{FINAL\\ ANSWER:}$ Computing...")
     root.update()
 
+    # Ask the Math Engine for the answer and steps
     final_answer, trail_steps = solve_linear_equation(math_equation, solve_for)
 
-    if final_answer in ["Error", "No Solution"]:
+    if final_answer == "Error":
         trail_display.insert(tk.END, "[VALIDATION STATUS: FAIL]\n\n")
         display_solution_trail(trail_display, trail_steps)
         set_final_answer("$\\mathbf{FINAL\\ ANSWER:}$ Error")
         messagebox.showerror("Computation Error", trail_steps[0][1])
     else:
+        # This now correctly handles numbers, "No Solution", and "Infinite Solutions" as PASS!
         trail_display.insert(tk.END, "[VALIDATION STATUS: PASS]\n\n")
         display_solution_trail(trail_display, trail_steps)
-        set_final_answer(f"FINAL ANSWER: {final_answer}")
 
+        # If it's a special text answer, format it nicely without the equals sign
+        if final_answer in ["No Solution", "Infinite Solutions"]:
+            set_final_answer(f"$\\mathbf{{FINAL\\ ANSWER:}}$ {final_answer}")
+        else:
+            set_final_answer(f"FINAL ANSWER: {final_answer}")
 
 # --- Main Window Setup ---
 root = tk.Tk()

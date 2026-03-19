@@ -22,11 +22,11 @@ def get_expanded_terms(expr):
 
 
 def solve_linear_equation(equation_str, target_var_str):
-    """Calculates the answer and dynamically verifies it using strict AST substitution."""
+    """Calculates the answer and explicitly prints the algorithm's stopping rules."""
     steps = []
     try:
         if equation_str.count("=") != 1:
-            return "Error", [("text", "Invalid formatting. Please use exactly one '=' sign.")]
+            return "Error", [("text", "[STOPPING RULE]: Invalid formatting. Process halted.")]
 
         lhs_str, rhs_str = equation_str.split("=", 1)
         v = sp.Symbol(target_var_str)
@@ -44,15 +44,19 @@ def solve_linear_equation(equation_str, target_var_str):
 
         step_count = 1
 
+        # EARLY VALIDATION: Check if the user forgot to type the variable entirely (e.g. "5 = 10")
+        if not LHS_raw.has(v) and not RHS_raw.has(v):
+            return "Error", [
+                ("text", f"[STOPPING RULE]: Variable '{v}' is entirely missing from the input. Process halted.")]
         collected_expr = sp.simplify(LHS - RHS)
-        if not collected_expr.has(v) and collected_expr != 0:
-            return "Error", [("text", f"The variable '{v}' is not in the equation!")]
 
         num, den = sp.fraction(sp.cancel(LHS - RHS))
         if den.has(v):
-            return "Error", [("text", f"Not a linear equation. Variable '{v}' is in a denominator.")]
+            return "Error", [("text",
+                              f"[STOPPING RULE]: Rational equation detected. Solver restricted to linear equations. Process halted.")]
         if sp.degree(collected_expr, v) > 1:
-            return "Error", [("text", f"Not a linear equation. Variable '{v}' has an exponent.")]
+            return "Error", [
+                ("text", f"[STOPPING RULE]: Exponent detected. Solver restricted to linear equations. Process halted.")]
 
         # DYNAMIC STEP: Move to left
         if RHS_raw != sp.Integer(0):
@@ -122,14 +126,22 @@ def solve_linear_equation(equation_str, target_var_str):
         A = collected_expr.coeff(v)
         B = collected_expr - (A * v)
 
+        # ==========================================
+        # STOPPING RULES: IDENTITY & CONTRADICTION
+        # ==========================================
         if A == 0:
             if B == 0:
+                steps.append(("text", f"{step_count}. Identify the coefficient (A) and the constant (B): A = 0, B = 0"))
                 steps.append(("text",
-                              f"   Wait! The coefficient A is 0, and the constant B is also 0. This leaves a universally true statement (0 = 0)."))
+                              "   Wait! The variable cancels out completely, leaving a universally true statement (0 = 0)."))
+                steps.append(("text", "\n[STOPPING RULE MATCHED]: Identity reached. Infinite solutions exist."))
                 return "Infinite Solutions", steps
             else:
+                steps.append(
+                    ("text", f"{step_count}. Identify the coefficient (A) and the constant (B): A = 0, B = {B}"))
                 steps.append(("text",
-                              f"   Wait! The coefficient A is 0, but the constant B is {B}. This leaves a universally false statement ({B} = 0)."))
+                              f"   Wait! The variable cancels out completely, leaving a universally false statement ({B} = 0)."))
+                steps.append(("text", "\n[STOPPING RULE MATCHED]: Contradiction reached. No valid solution exists."))
                 return "No Solution", steps
 
         # DYNAMIC STEP: Identify A and B
@@ -182,21 +194,16 @@ def solve_linear_equation(equation_str, target_var_str):
 
         step_count += 1
 
-        # ==========================================
-        # NEW: THE FRACTION-PROOF VERIFICATION STEP
-        # ==========================================
+        # THE VERIFICATION STEP
         steps.append(("text",
                       f"\n{step_count}. Verify the answer by substituting ({answer}) back into the original equation for '{v}':"))
 
-        # We use sp.UnevaluatedExpr to perfectly substitute the answer into the math structure
-        # without allowing SymPy to automatically calculate the result yet!
         visual_ans = sp.UnevaluatedExpr(answer)
         visual_lhs = LHS_raw.subs(v, visual_ans)
         visual_rhs = RHS_raw.subs(v, visual_ans)
 
         steps.append(("math", sp.Eq(visual_lhs, visual_rhs, evaluate=False)))
 
-        # Evaluate both sides completely to check the math
         lhs_eval = sp.simplify(LHS.subs(v, answer))
         rhs_eval = sp.simplify(RHS.subs(v, answer))
 
@@ -208,9 +215,15 @@ def solve_linear_equation(equation_str, target_var_str):
         else:
             steps.append(("text", "   ❌ Verification failed. (Check for rounding errors)."))
 
+        # ==========================================
+        # STOPPING RULE: EXACT FORM REACHED
+        # ==========================================
+        steps.append(("text",
+                      f"\n[STOPPING RULE MATCHED]: Exact analytical form reached. The variable '{v}' is completely isolated."))
+
         return final_answer, steps
 
     except ZeroDivisionError:
-        return "Error", [("text", "Division by zero detected. Please check your math.")]
+        return "Error", [("text", "[STOPPING RULE]: Division by zero detected. Process halted.")]
     except Exception as e:
-        return "Error", [("text", "Invalid math formatting. Please check your equation.")]
+        return "Error", [("text", "[STOPPING RULE]: Invalid math formatting. Process halted.")]
