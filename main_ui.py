@@ -368,7 +368,8 @@ def compute_action():
     root.update()
 
     # Ask the Math Engine for the answer and steps
-    final_answer, trail_steps = solve_linear_equation(math_equation, solve_for)
+    chosen_method = solver_method.get()
+    final_answer, trail_steps = solve_linear_equation(math_equation, solve_for, chosen_method)
 
     if final_answer == "Error":
         trail_display.insert(tk.END, "[VALIDATION STATUS: FAIL]\n\n")
@@ -452,13 +453,24 @@ for text, row, col in buttons:
               bg=bg_color, command=action).grid(row=row, column=col, padx=2, pady=2)
 
 options_frame = tk.Frame(left_frame)
-options_frame.pack(pady=(15, 0))
+options_frame.pack(pady=(15, 0), fill=tk.X)
 
-tk.Label(options_frame, text="Solve for:", font=("Helvetica", 10, "bold")).pack(side=tk.LEFT, padx=5)
+var_frame = tk.Frame(options_frame)
+var_frame.pack(anchor="w")
+tk.Label(var_frame, text="Solve for:", font=("Helvetica", 10, "bold")).pack(side=tk.LEFT, padx=5)
 
 target_var = tk.StringVar()
-radio_buttons_inner_frame = tk.Frame(options_frame)
+radio_buttons_inner_frame = tk.Frame(var_frame)
 radio_buttons_inner_frame.pack(side=tk.LEFT)
+
+# --- NEW: Symbolic Method Selection Row ---
+method_frame = tk.Frame(options_frame)
+method_frame.pack(anchor="w", pady=(10, 0))
+tk.Label(method_frame, text="Method:", font=("Helvetica", 10, "bold")).pack(side=tk.LEFT, padx=5)
+
+solver_method = tk.StringVar(value="standard")
+tk.Radiobutton(method_frame, text="Standard Form (Ax + B = 0)", variable=solver_method, value="standard", font=("Helvetica", 10)).pack(side=tk.LEFT)
+tk.Radiobutton(method_frame, text="Two-Sided Balancing (Ax = C)", variable=solver_method, value="balancing", font=("Helvetica", 10)).pack(side=tk.LEFT)
 
 tk.Button(left_frame, text="COMPUTE", font=("Helvetica", 12, "bold"), bg="#99ff99", height=2,
           command=compute_action).pack(fill=tk.X, pady=(15, 0))
