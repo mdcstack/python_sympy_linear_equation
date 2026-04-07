@@ -403,8 +403,8 @@ help_menu = tk.Menu(menu_bar, tearoff=0)
 def show_about():
     messagebox.showinfo(
         "About",
-        "Linear Equation Tutor v1.0 (Midterm Build)\n"
-        "Created by: Matt\n\n"
+        "Linear Equation Tutor v1.0\n"
+        "Created by: Mellissa Ambegia,\nEndred Antoine Baido, \nMatthew David Cartagena\n\n"
         "Features:\n"
         "- Exact Symbolic Computation\n"
         "- Dual Solving Methods (Standard & Balancing)\n"
