@@ -395,6 +395,27 @@ root.resizable(False, False)
 root.configure(padx=20, pady=20)
 
 # ==========================================
+# MENU BAR (About / Help Section)
+# ==========================================
+menu_bar = tk.Menu(root)
+help_menu = tk.Menu(menu_bar, tearoff=0)
+
+def show_about():
+    messagebox.showinfo(
+        "About",
+        "Linear Equation Tutor v1.0 (Midterm Build)\n"
+        "Created by: Matt\n\n"
+        "Features:\n"
+        "- Exact Symbolic Computation\n"
+        "- Dual Solving Methods (Standard & Balancing)\n"
+        "- High-Fidelity Panning Math Displays"
+    )
+
+help_menu.add_command(label="About / Help", command=show_about)
+menu_bar.add_cascade(label="Help", menu=help_menu)
+root.config(menu=menu_bar)
+
+# ==========================================
 # LEFT FRAME: The Calculator Input & Keypad
 # ==========================================
 left_frame = tk.Frame(root)
