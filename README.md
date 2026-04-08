@@ -1,4 +1,4 @@
-# Linear Equation Tutor v1.0
+# Linear Equation Calculator v1.0
 **Author/s:** Mellissa Ambeguia, 
               Endred Antoine Baido, 
               Matthew David Cartagena 
