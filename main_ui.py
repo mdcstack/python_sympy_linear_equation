@@ -404,7 +404,7 @@ def show_about():
     messagebox.showinfo(
         "About",
         "Linear Equation Tutor v1.0\n"
-        "Created by: Mellissa Ambegia,\nEndred Antoine Baido, \nMatthew David Cartagena\n\n"
+        "Created by: Mellissa Ambeguia,\nEndred Antoine Baido, \nMatthew David Cartagena\n\n"
         "Features:\n"
         "- Exact Symbolic Computation\n"
         "- Dual Solving Methods (Standard & Balancing)\n"
