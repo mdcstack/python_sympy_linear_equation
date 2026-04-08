@@ -4,7 +4,7 @@
               Matthew David Cartagena 
 
 ## Description
-An interactive, Human-Computer Interaction (HCI) focused educational tool that solves linear equations using exact symbolic computation. It acts as a "glass box" tutor, showing complete step-by-step mathematical logic and deterministic stopping rules.
+An interactive, Human-Computer Interaction (HCI) focused educational tool that solves linear equations using exact symbolic computation. It shows a step-by-step mathematical logic and deterministic stopping rules.
 
 ## Features
 * **Two Solver Methods:** Choose between Standard Form Isolation ($Ax + B = 0$) and Two-Sided Balancing ($Ax = C$).
