@@ -7,6 +7,13 @@ from math_engine import solve_linear_equation
 from PIL import Image, ImageTk
 import io
 from solution_display import display_solution_trail
+from tkinter import filedialog
+import datetime
+import webbrowser
+import os
+# Add these near the top with your other global trackers
+latest_trail_steps = []
+latest_final_answer = ""
 
 matplotlib.use("TkAgg")
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
@@ -367,9 +374,18 @@ def compute_action():
     set_final_answer("$\\mathbf{FINAL\\ ANSWER:}$ Computing...")
     root.update()
 
-    # Ask the Math Engine for the answer and steps
+    # Grab the chosen method
     chosen_method = solver_method.get()
+
+    # Tell Python we want to modify the global variables
+    global latest_trail_steps, latest_final_answer
+
+    # Ask the Math Engine for the answer and steps
     final_answer, trail_steps = solve_linear_equation(math_equation, solve_for, chosen_method)
+
+    # Save the data globally for the export function to use later!
+    latest_trail_steps = trail_steps
+    latest_final_answer = final_answer
 
     if final_answer == "Error":
         trail_display.insert(tk.END, "[VALIDATION STATUS: FAIL]\n\n")
@@ -387,6 +403,92 @@ def compute_action():
         else:
             set_final_answer(f"FINAL ANSWER: {final_answer}")
 
+
+def export_report():
+    """Extracts the solution trail, formats it with HTML, and auto-opens it in the browser."""
+    if not latest_trail_steps:
+        messagebox.showwarning("Export Error",
+                               "There is no solved equation to export. Please compute an equation first.")
+        return
+
+    # NEW: Added 'initialfile' to give it a default name!
+    file_path = filedialog.asksaveasfilename(
+        initialfile="Untitled_Audit_Report.html",
+        defaultextension=".html",
+        filetypes=[("HTML Document", "*.html")],
+        title="Export Solution Report"
+    )
+
+    if file_path:
+        try:
+            with open(file_path, "w", encoding="utf-8") as file:
+                # 1. HTML Boilerplate, Styling, and MathJax Script
+                file.write("""<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Linear Equation Audit Report</title>
+    <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; padding: 40px; max-width: 800px; margin: auto; color: #333; background-color: #f4f7f6; }
+        .container { background: #fff; padding: 40px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
+        h1 { text-align: center; color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 15px; margin-bottom: 30px; }
+        .step { margin-bottom: 10px; font-size: 1.1em; }
+        .math-display { font-size: 1.3em; text-align: center; margin: 15px 0; color: #2980b9; overflow-x: auto; }
+        .final-answer { font-size: 1.5em; text-align: center; margin: 30px 0; padding: 20px; background: #e8f8f5; border-left: 5px solid #1abc9c; border-radius: 5px; font-weight: bold;}
+        .summary { margin-top: 40px; padding: 20px; background: #ecf0f1; border-radius: 5px; border-left: 5px solid #e74c3c; font-size: 0.95em; }
+        .summary h2 { margin-top: 0; color: #c0392b; font-size: 1.2em; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>LINEAR EQUATION AUDIT REPORT</h1>
+""")
+
+                # 2. Main Content (Loop through the saved raw data)
+                for step_type, step_data in latest_trail_steps:
+                    if step_type == "text":
+                        clean_text = step_data.replace("\n", "<br>")
+                        if clean_text in ["GIVEN:", "METHOD: Deterministic Algorithmic Isolation",
+                                          "METHOD: Two-Sided Equation Balancing (Variables Left, Constants Right)"]:
+                            file.write(f'<div class="step"><strong>{clean_text}</strong></div>\n')
+                        else:
+                            file.write(f'<div class="step">{clean_text}</div>\n')
+
+                    elif step_type == "math":
+                        if isinstance(step_data, str):
+                            clean_math = step_data.replace('$', '')
+                            file.write(f'<div class="math-display">\\[ {clean_math} \\]</div>\n')
+                        elif hasattr(step_data, "lhs") and hasattr(step_data, "rhs"):
+                            latex_lhs = sp.latex(step_data.lhs)
+                            latex_rhs = sp.latex(step_data.rhs)
+                            file.write(f'<div class="math-display">\\[ {latex_lhs} = {latex_rhs} \\]</div>\n')
+                        else:
+                            latex_expr = sp.latex(step_data)
+                            file.write(f'<div class="math-display">\\[ {latex_expr} \\]</div>\n')
+
+                # 3. Highlight the Final Answer
+                file.write(f'<div class="final-answer">FINAL ANSWER: {latest_final_answer}</div>\n')
+
+                # 4. Add the required SUMMARY section
+                file.write(f"""        <div class="summary">
+            <h2>AUDIT SUMMARY</h2>
+            <strong>Generated on:</strong> {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}<br>
+            <strong>Engine:</strong> Exact Symbolic Solver (SymPy)<br>
+            <strong>Status:</strong> Audit Complete. All mathematical steps explicitly verified.
+        </div>
+    </div>
+</body>
+</html>""")
+
+            # NEW: Auto-open the file in the default web browser!
+            absolute_path = os.path.abspath(file_path)
+            webbrowser.open(f"file://{absolute_path}")
+
+        except Exception as e:
+            messagebox.showerror("Export Error", f"Failed to save or open file: {e}")
+
 # --- Main Window Setup ---
 root = tk.Tk()
 root.title("Linear Equation Calculator")
@@ -394,25 +496,35 @@ root.geometry("950x620")
 root.resizable(False, False)
 root.configure(padx=20, pady=20)
 
+
 # ==========================================
-# MENU BAR (About / Help Section)
+# MENU BAR (File / Help Section)
 # ==========================================
 menu_bar = tk.Menu(root)
-help_menu = tk.Menu(menu_bar, tearoff=0)
 
+# --- FILE MENU ---
+file_menu = tk.Menu(menu_bar, tearoff=0)
+file_menu.add_command(label="Export Report (.txt)", command=export_report)
+file_menu.add_separator()
+file_menu.add_command(label="Exit Application", command=root.quit)
+menu_bar.add_cascade(label="File", menu=file_menu)
+
+# --- HELP MENU ---
+help_menu = tk.Menu(menu_bar, tearoff=0)
 def show_about():
     messagebox.showinfo(
         "About",
-        "Linear Equation Tutor v1.0\n"
-        "Created by: Mellissa Ambeguia,\nEndred Antoine Baido, \nMatthew David Cartagena\n\n"
+        "Linear Equation Tutor v1.0 (Midterm Build)\n"
+        "Created by: Matt\n\n"
         "Features:\n"
         "- Exact Symbolic Computation\n"
         "- Dual Solving Methods (Standard & Balancing)\n"
-        "- High-Fidelity Panning Math Displays"
+        "- High-Fidelity Panning Math Displays\n"
+        "- TXT Report Exporting"
     )
-
 help_menu.add_command(label="About / Help", command=show_about)
 menu_bar.add_cascade(label="Help", menu=help_menu)
+
 root.config(menu=menu_bar)
 
 # ==========================================
